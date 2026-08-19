@@ -92,9 +92,29 @@ export type OpenAIChatRequest = {
   tool_choice?: unknown;
 };
 
+export type OpenAIToolCallDelta = {
+  index?: number;
+  id?: string;
+  type?: string;
+  function?: {
+    name?: string;
+    arguments?: string;
+  };
+};
+
+export type OpenAIToolCall = {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
+};
+
 export type CompletionChunk = {
   text?: string;
   finishReason?: string | null;
+  toolCalls?: OpenAIToolCallDelta[];
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;

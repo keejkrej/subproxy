@@ -1,7 +1,7 @@
 import type { CompletionChunk, OpenAIChatRequest, ProbeResult, SessionSecret } from "@/lib/types";
 import { refreshChatGptToken } from "@/lib/oauth/chatgpt";
 import { expiryFromJwt } from "@/lib/jwt";
-import { messageText } from "@/lib/openai-stream";
+import { toResponsesInput, toResponsesToolChoice, toResponsesTools } from "@/lib/tools";
 
 const BASE_URL = "https://chatgpt.com/backend-api";
 
@@ -22,22 +22,6 @@ function authHeaders(secret: SessionSecret) {
   };
 }
 
-function toInput(req: OpenAIChatRequest) {
-  return req.messages.map((message) => ({
-    type: "message",
-    role: message.role === "assistant" ? "assistant" : message.role === "system" ? "user" : "user",
-    content: [
-      {
-        type: message.role === "assistant" ? "output_text" : "input_text",
-        text:
-          message.role === "system"
-            ? `System:\n${messageText(message.content)}`
-            : messageText(message.content),
-      },
-    ],
-  }));
-}
-
 const MODEL_ALIASES: Record<string, string> = {
   "gpt-5": "gpt-5.6-terra",
   "gpt-5-codex": "gpt-5.6-terra",
@@ -49,15 +33,23 @@ function resolveChatGptModel(model: string): string {
   return MODEL_ALIASES[model] ?? model;
 }
 
-async function postResponses(secret: SessionSecret, req: OpenAIChatRequest) {
-  const body = {
+export function buildChatGptResponsesBody(req: OpenAIChatRequest) {
+  const { instructions, input } = toResponsesInput(req.messages);
+  const tools = toResponsesTools(req.tools);
+  const toolChoice = toResponsesToolChoice(req.tool_choice);
+  return {
     model: resolveChatGptModel(req.model),
-    instructions: "You are a helpful assistant.",
-    input: toInput(req),
+    instructions,
+    input,
     store: false,
     stream: true,
     parallel_tool_calls: false,
+    ...(tools ? { tools } : {}),
+    ...(toolChoice !== undefined ? { tool_choice: toolChoice } : {}),
   };
+}
+
+async function postResponses(secret: SessionSecret, req: OpenAIChatRequest) {
   const response = await fetch(`${BASE_URL}/codex/responses`, {
     method: "POST",
     headers: {
@@ -65,7 +57,7 @@ async function postResponses(secret: SessionSecret, req: OpenAIChatRequest) {
       Accept: "text/event-stream",
       ...authHeaders(secret),
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(buildChatGptResponsesBody(req)),
   });
   if (!response.ok) {
     const text = await response.text().catch(() => "");
@@ -102,26 +94,169 @@ async function* readSse(body: ReadableStream<Uint8Array>): AsyncGenerator<Record
   }
 }
 
-function chunkFromEvent(event: Record<string, unknown>): CompletionChunk | null {
-  const type = String(event.type ?? "");
-  if (type === "response.output_text.delta" && typeof event.delta === "string") {
-    return { text: event.delta };
+type ToolCallState = {
+  index: number;
+  id: string;
+  name: string;
+  arguments: string;
+  started: boolean;
+};
+
+function toolCallKey(event: Record<string, unknown>): string {
+  if (typeof event.item_id === "string" && event.item_id) return event.item_id;
+  const item = event.item && typeof event.item === "object" ? (event.item as Record<string, unknown>) : null;
+  if (item && typeof item.id === "string" && item.id) return item.id;
+  if (item && typeof item.call_id === "string" && item.call_id) return item.call_id;
+  if (typeof event.call_id === "string" && event.call_id) return event.call_id;
+  if (typeof event.output_index === "number") return `output-${event.output_index}`;
+  return "";
+}
+
+function usageFromResponse(response: { usage?: { input_tokens?: number; output_tokens?: number } } | undefined) {
+  const usage = response?.usage;
+  if (!usage) return undefined;
+  return {
+    prompt_tokens: usage.input_tokens ?? 0,
+    completion_tokens: usage.output_tokens ?? 0,
+    total_tokens: (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
+  };
+}
+
+export function createChatGptChunkParser() {
+  const byKey = new Map<string, ToolCallState>();
+  let nextIndex = 0;
+  let sawToolCall = false;
+
+  function getOrCreate(key: string, item?: Record<string, unknown>): ToolCallState {
+    let state = byKey.get(key);
+    if (!state) {
+      state = {
+        index: nextIndex++,
+        id:
+          (typeof item?.call_id === "string" && item.call_id) ||
+          (typeof item?.id === "string" && item.id) ||
+          key,
+        name: typeof item?.name === "string" ? item.name : "",
+        arguments: "",
+        started: false,
+      };
+      byKey.set(key, state);
+    } else {
+      if (typeof item?.call_id === "string" && item.call_id) state.id = item.call_id;
+      if (typeof item?.name === "string" && item.name) state.name = item.name;
+    }
+    return state;
   }
-  if (type === "response.completed") {
-    const response = event.response as { usage?: { input_tokens?: number; output_tokens?: number } } | undefined;
-    const usage = response?.usage;
-    return {
-      finishReason: "stop",
-      usage: usage
-        ? {
-            prompt_tokens: usage.input_tokens ?? 0,
-            completion_tokens: usage.output_tokens ?? 0,
-            total_tokens: (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
+
+  return function chunkFromEvent(event: Record<string, unknown>): CompletionChunk | null {
+    const type = String(event.type ?? "");
+    if (type === "response.output_text.delta" && typeof event.delta === "string") {
+      return { text: event.delta };
+    }
+
+    if (type === "response.output_item.added") {
+      const item = event.item && typeof event.item === "object" ? (event.item as Record<string, unknown>) : null;
+      if (item?.type !== "function_call") return null;
+      const key = toolCallKey(event);
+      if (!key) return null;
+      const state = getOrCreate(key, item);
+      sawToolCall = true;
+      state.started = true;
+      const args = typeof item.arguments === "string" ? item.arguments : "";
+      if (args) state.arguments = args;
+      return {
+        toolCalls: [
+          {
+            index: state.index,
+            id: state.id,
+            type: "function",
+            function: { name: state.name, arguments: args },
+          },
+        ],
+      };
+    }
+
+    if (type === "response.function_call_arguments.delta" && typeof event.delta === "string") {
+      const key = toolCallKey(event);
+      if (!key) return null;
+      const state = getOrCreate(key);
+      sawToolCall = true;
+      state.arguments += event.delta;
+      const toolCall: NonNullable<CompletionChunk["toolCalls"]>[number] = {
+        index: state.index,
+        function: { arguments: event.delta },
+      };
+      if (!state.started) {
+        toolCall.id = state.id;
+        toolCall.type = "function";
+        if (state.name) toolCall.function = { name: state.name, arguments: event.delta };
+        state.started = true;
+      }
+      return { toolCalls: [toolCall] };
+    }
+
+    if (type === "response.output_item.done") {
+      const item = event.item && typeof event.item === "object" ? (event.item as Record<string, unknown>) : null;
+      if (item?.type !== "function_call") return null;
+      const key = toolCallKey(event);
+      if (!key) return null;
+      const state = getOrCreate(key, item);
+      sawToolCall = true;
+      const args = typeof item.arguments === "string" ? item.arguments : "";
+      if (!state.started || !state.arguments) {
+        if (args && !state.arguments) state.arguments = args;
+        state.started = true;
+        return {
+          toolCalls: [
+            {
+              index: state.index,
+              id: state.id,
+              type: "function",
+              function: { name: state.name, arguments: state.arguments || args },
+            },
+          ],
+        };
+      }
+      return null;
+    }
+
+    if (type === "response.completed") {
+      const response = event.response as
+        | {
+            usage?: { input_tokens?: number; output_tokens?: number };
+            output?: Record<string, unknown>[];
           }
-        : undefined,
-    };
-  }
-  return null;
+        | undefined;
+      const missed: NonNullable<CompletionChunk["toolCalls"]> = [];
+      for (const item of response?.output ?? []) {
+        if (item?.type !== "function_call") continue;
+        const key =
+          (typeof item.id === "string" && item.id) ||
+          (typeof item.call_id === "string" && item.call_id) ||
+          "";
+        const existing = key ? byKey.get(key) : undefined;
+        if (existing?.started && existing.arguments) continue;
+        const state = getOrCreate(key || `harvest-${nextIndex}`, item);
+        sawToolCall = true;
+        state.started = true;
+        const args = typeof item.arguments === "string" ? item.arguments : state.arguments;
+        if (args && !state.arguments) state.arguments = args;
+        missed.push({
+          index: state.index,
+          id: state.id,
+          type: "function",
+          function: { name: state.name, arguments: args },
+        });
+      }
+      return {
+        ...(missed.length ? { toolCalls: missed } : {}),
+        finishReason: sawToolCall || missed.length ? "tool_calls" : "stop",
+        usage: usageFromResponse(response),
+      };
+    }
+
+    return null;
+  };
 }
 
 export async function* completeChatGpt(
@@ -129,6 +264,7 @@ export async function* completeChatGpt(
   req: OpenAIChatRequest,
 ): AsyncGenerator<CompletionChunk> {
   const body = await postResponses(secret, req);
+  const chunkFromEvent = createChatGptChunkParser();
   for await (const event of readSse(body)) {
     const chunk = chunkFromEvent(event);
     if (chunk) yield chunk;

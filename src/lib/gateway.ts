@@ -8,6 +8,7 @@ import {
   openAIResponse,
   sseResponse,
 } from "./openai-stream";
+import { aggregateChunks } from "./tools";
 import type { CompletionChunk, OpenAIChatRequest, ProviderId } from "./types";
 import { extractBearer } from "./issued-key";
 
@@ -141,14 +142,9 @@ export async function handleChatCompletions(req: Request): Promise<Response> {
       return sseResponse(stream);
     }
 
-    let text = "";
-    let usage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
-    let finishReason = "stop";
-    for await (const chunk of chunks()) {
-      if (chunk.text) text += chunk.text;
-      if (chunk.usage) usage = chunk.usage;
-      if (chunk.finishReason) finishReason = chunk.finishReason;
-    }
+    const collected: CompletionChunk[] = [];
+    for await (const chunk of chunks()) collected.push(chunk);
+    const { text, usage, finishReason, toolCalls } = aggregateChunks(collected);
     await safeLedger({
       issuedKeyId,
       sessionId,
@@ -159,7 +155,17 @@ export async function handleChatCompletions(req: Request): Promise<Response> {
       inputTokens: usage?.prompt_tokens ?? null,
       outputTokens: usage?.completion_tokens ?? null,
     });
-    return Response.json(openAIResponse({ id, model: body.model, created, text, usage, finishReason }));
+    return Response.json(
+      openAIResponse({
+        id,
+        model: body.model,
+        created,
+        text,
+        usage,
+        finishReason,
+        toolCalls: toolCalls.length ? toolCalls : undefined,
+      }),
+    );
   } catch (error) {
     const status = error instanceof GatewayError ? error.status : 500;
     await safeLedger({
