@@ -1,4 +1,4 @@
-import { chatgptAccountIdFromToken, cursorIdentityFromToken } from "@/lib/jwt";
+import { chatgptAccountIdFromToken, cursorIdentityFromToken, expiryFromJwt } from "@/lib/jwt";
 import { operatorFailed, requireOperator } from "@/lib/operator";
 import { upsertSession } from "@/lib/vault";
 import type { ProviderId, SessionSecret } from "@/lib/types";
@@ -39,6 +39,7 @@ export async function POST(req: Request) {
       identity,
       secret,
       health: "unknown",
+      expiresAt: expiryFromJwt(body.accessToken),
     });
     return Response.json({ session });
   } catch (error) {

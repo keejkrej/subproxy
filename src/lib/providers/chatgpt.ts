@@ -1,5 +1,6 @@
 import type { CompletionChunk, OpenAIChatRequest, ProbeResult, SessionSecret } from "@/lib/types";
 import { refreshChatGptToken } from "@/lib/oauth/chatgpt";
+import { expiryFromJwt } from "@/lib/jwt";
 import { messageText } from "@/lib/openai-stream";
 
 const BASE_URL = "https://chatgpt.com/backend-api";
@@ -137,11 +138,14 @@ export async function* completeChatGpt(
 export async function probeChatGpt(secret: SessionSecret): Promise<ProbeResult> {
   const oauth = oauthSecret(secret);
   try {
-    const refreshed = await refreshChatGptToken(oauth.refreshToken);
+    if (!oauth.accountId) throw new Error("ChatGPT session is missing account id");
+    const expiresAt = expiryFromJwt(oauth.accessToken);
+    if (expiresAt && expiresAt.getTime() <= Date.now()) {
+      throw new Error("ChatGPT access token expired");
+    }
     return {
       health: "healthy",
-      identity: refreshed.accountId ?? oauth.accountId ?? null,
-      expiresAt: refreshed.expiresAt,
+      identity: oauth.accountId,
     };
   } catch (error) {
     return {

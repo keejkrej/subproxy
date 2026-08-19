@@ -17,7 +17,7 @@ export async function probeSession(id: string) {
       identity: result.identity ?? session.identity,
       expiresAt: result.expiresAt ?? refreshed.expiresAt,
       lastError: result.error ?? null,
-      secret: refreshed.secret,
+      secret: result.secret ?? refreshed.secret,
     });
     return result;
   } catch (error) {

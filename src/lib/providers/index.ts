@@ -1,4 +1,5 @@
 import { shouldRefresh } from "@/lib/health";
+import { expiryFromJwt } from "@/lib/jwt";
 import type { CompletionChunk, OpenAIChatRequest, ProbeResult, ProviderId, SessionSecret } from "@/lib/types";
 import { completeChatGpt, probeChatGpt, refreshChatGptSecret, CHATGPT_MODELS } from "./chatgpt";
 import { completeCursor, probeCursor, refreshCursorSecret, CURSOR_MODELS } from "./cursor";
@@ -28,8 +29,9 @@ export async function refreshIfNeeded(
   if (secret.kind !== "oauth") {
     return { secret, expiresAt, refreshed: false };
   }
-  if (!shouldRefresh(expiresAt) && expiresAt) {
-    return { secret, expiresAt, refreshed: false };
+  const effectiveExpiry = expiresAt ?? expiryFromJwt(secret.accessToken);
+  if (!shouldRefresh(effectiveExpiry)) {
+    return { secret, expiresAt: effectiveExpiry, refreshed: false };
   }
   if (provider === "chatgpt") {
     const next = await refreshChatGptSecret(secret);
@@ -41,9 +43,9 @@ export async function refreshIfNeeded(
   }
   if (provider === "cursor") {
     const next = await refreshCursorSecret(secret);
-    return { ...next, refreshed: true };
+    return { ...next, refreshed: false };
   }
-  return { secret, expiresAt, refreshed: false };
+  return { secret, expiresAt: effectiveExpiry, refreshed: false };
 }
 
 export function catalogFor(provider: ProviderId): string[] {

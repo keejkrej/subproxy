@@ -57,6 +57,7 @@ export async function pollCursorPkceAuth(input: {
   return tokensFromPair(body.accessToken, body.refreshToken);
 }
 
+/** Cursor PKCE session tokens are not refreshable; `/auth/token` 404s. Prefer JWT exp. */
 export async function refreshCursorToken(refreshToken: string): Promise<CursorTokens> {
   const response = await fetch(`${API_BASE}/auth/token`, {
     method: "POST",

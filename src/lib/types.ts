@@ -93,4 +93,5 @@ export type ProbeResult = {
   identity?: string | null;
   expiresAt?: Date | null;
   error?: string | null;
+  secret?: SessionSecret;
 };

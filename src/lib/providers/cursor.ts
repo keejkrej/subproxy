@@ -1,5 +1,5 @@
 import { createCursorDecoder, cursorAvailableModels, streamCursorChat } from "@/lib/cursor-wire";
-import { refreshCursorToken } from "@/lib/oauth/cursor";
+import { cursorIdentityFromToken, expiryFromJwt } from "@/lib/jwt";
 import { messageText } from "@/lib/openai-stream";
 import type { CompletionChunk, OpenAIChatRequest, ProbeResult, SessionSecret } from "@/lib/types";
 
@@ -14,27 +14,28 @@ export async function refreshCursorSecret(secret: SessionSecret): Promise<{
   identity?: string | null;
 }> {
   const oauth = oauthSecret(secret);
-  const tokens = await refreshCursorToken(oauth.refreshToken);
+  const expiresAt = expiryFromJwt(oauth.accessToken);
+  if (expiresAt && expiresAt.getTime() <= Date.now()) {
+    throw new Error("Cursor session token expired; reconnect Cursor");
+  }
   return {
-    secret: {
-      kind: "oauth",
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      accountId: tokens.identity ?? oauth.accountId,
-    },
-    expiresAt: tokens.expiresAt,
-    identity: tokens.identity ?? oauth.accountId ?? null,
+    secret,
+    expiresAt,
+    identity: cursorIdentityFromToken(oauth.accessToken) ?? oauth.accountId ?? null,
   };
 }
 
 export async function probeCursor(secret: SessionSecret): Promise<ProbeResult> {
+  const oauth = oauthSecret(secret);
   try {
-    const refreshed = await refreshCursorSecret(secret);
-    const models = await cursorAvailableModels(oauthSecret(refreshed.secret).accessToken);
+    const models = await cursorAvailableModels(oauth.accessToken);
     return {
       health: "healthy",
-      identity: refreshed.identity ?? (models.length ? `${models.length} models` : "cursor"),
-      expiresAt: refreshed.expiresAt,
+      identity:
+        cursorIdentityFromToken(oauth.accessToken) ??
+        oauth.accountId ??
+        (models.length ? `${models.length} models` : "cursor"),
+      expiresAt: expiryFromJwt(oauth.accessToken),
     };
   } catch (error) {
     return {
