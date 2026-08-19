@@ -1,4 +1,5 @@
 import { expiryFromSeconds } from "@/lib/health";
+import { decodeJwtPayload } from "@/lib/jwt";
 
 const ISSUER = "https://auth.x.ai";
 const CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828";
@@ -94,27 +95,42 @@ export async function pollGrokDeviceAuth(input: {
   throw new Error(`Grok device poll failed (${response.status}${error ? `: ${error}` : ""})`);
 }
 
+export function grokPrincipalFromToken(accessToken: string): { type?: string; id?: string } {
+  const payload = decodeJwtPayload(accessToken);
+  if (!payload) return {};
+  return {
+    type: typeof payload.principal_type === "string" ? payload.principal_type : undefined,
+    id: typeof payload.principal_id === "string" ? payload.principal_id : undefined,
+  };
+}
+
 export async function refreshGrokToken(
   refreshToken: string,
   tokenEndpoint?: string,
+  principal?: { type?: string; id?: string },
 ): Promise<GrokTokens> {
   const endpoint = tokenEndpoint || (await grokTokenEndpoint());
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    client_id: CLIENT_ID,
+    refresh_token: refreshToken,
+  });
+  if (principal?.type) body.set("principal_type", principal.type);
+  if (principal?.id) body.set("principal_id", principal.id);
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json",
     },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      client_id: CLIENT_ID,
-      refresh_token: refreshToken,
-    }),
+    body,
   });
+  const json = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
-    throw new Error(`Grok refresh failed (${response.status})`);
+    const detail = [json.error, json.error_description].filter(Boolean).join(": ");
+    throw new Error(`Grok refresh failed (${response.status}${detail ? `: ${detail}` : ""})`);
   }
-  return tokensFromResponse(await response.json(), endpoint, refreshToken);
+  return tokensFromResponse(json, endpoint, refreshToken);
 }
 
 function tokensFromResponse(
@@ -123,7 +139,7 @@ function tokensFromResponse(
   fallbackRefresh?: string,
 ): GrokTokens {
   const accessToken = String(json.access_token ?? "");
-  const refreshToken = String(json.refresh_token ?? fallbackRefresh ?? "");
+  const refreshToken = String(json.refresh_token || fallbackRefresh || "");
   if (!accessToken || !refreshToken) {
     throw new Error("Grok token response missing access or refresh token");
   }

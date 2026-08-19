@@ -17,16 +17,6 @@ export function expiryFromJwt(token: string): Date | null {
   return new Date(payload.exp * 1000);
 }
 
-export function cursorIdentityFromToken(token: string): string | undefined {
-  const payload = decodeJwtPayload(token);
-  if (!payload) return undefined;
-  for (const key of ["email", "preferred_username", "name", "sub"]) {
-    const value = payload[key];
-    if (typeof value === "string" && value) return value;
-  }
-  return undefined;
-}
-
 export function chatgptAccountIdFromToken(accessToken: string): string | undefined {
   const payload = decodeJwtPayload(accessToken);
   if (!payload) return undefined;

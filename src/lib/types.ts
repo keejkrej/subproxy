@@ -1,4 +1,4 @@
-export const PROVIDERS = ["chatgpt", "grok", "cursor"] as const;
+export const PROVIDERS = ["chatgpt", "grok"] as const;
 export type ProviderId = (typeof PROVIDERS)[number];
 
 export const HEALTH_STATES = [
@@ -33,6 +33,16 @@ export type SessionSummary = {
   lastProbedAt: string | null;
   lastError: string | null;
   createdAt: string;
+};
+
+export type ModelSummary = {
+  id: string;
+  name: string;
+  provider: ProviderId;
+  lastError: string | null;
+  lastTestedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type IssuedKeySummary = {

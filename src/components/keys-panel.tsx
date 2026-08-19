@@ -24,7 +24,13 @@ export function KeysPanel({ appUrl }: { appUrl: string }) {
   }
 
   useEffect(() => {
-    reload().catch((err: Error) => setError(err.message));
+    fetch("/api/keys")
+      .then(async (response) => {
+        const json = await response.json();
+        if (!response.ok) throw new Error(json.error ?? "failed");
+        setKeys(json.keys);
+      })
+      .catch((err: Error) => setError(err.message));
   }, []);
 
   async function create() {

@@ -31,6 +31,10 @@ export function encodeOpenAIDone(): string {
   return "data: [DONE]\n\n";
 }
 
+export function encodeOpenAIError(message: string): string {
+  return `data: ${JSON.stringify({ error: { message, type: "api_error" } })}\n\n`;
+}
+
 export function openAIResponse(input: {
   id: string;
   model: string;

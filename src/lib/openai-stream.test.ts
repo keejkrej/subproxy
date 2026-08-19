@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodeOpenAIChunk, encodeOpenAIDone, messageText, openAIResponse } from "./openai-stream";
+import { encodeOpenAIChunk, encodeOpenAIDone, encodeOpenAIError, messageText, openAIResponse } from "./openai-stream";
 
 describe("openai translation", () => {
   it("encodes a text delta as an OpenAI SSE chunk", () => {
@@ -12,6 +12,7 @@ describe("openai translation", () => {
     expect(chunk.startsWith("data: ")).toBe(true);
     expect(chunk).toContain('"content":"Hi"');
     expect(encodeOpenAIDone()).toBe("data: [DONE]\n\n");
+    expect(encodeOpenAIError("upstream failed (500)")).toContain('"message":"upstream failed (500)"');
   });
 
   it("builds a non-stream completion", () => {

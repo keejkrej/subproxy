@@ -1,6 +1,6 @@
 import { authenticateIssuedKey, GatewayError } from "@/lib/gateway";
-import { catalogFor } from "@/lib/providers";
-import { listSessions } from "@/lib/vault";
+import { DEFAULT_MODELS } from "@/lib/catalog";
+import { listModels } from "@/lib/vault";
 
 export const runtime = "nodejs";
 
@@ -14,10 +14,8 @@ export async function GET(req: Request) {
       { status },
     );
   }
-  const rows = await listSessions();
-  const models = rows
-    .filter((row) => row.health === "healthy" || row.health === "expiring")
-    .flatMap((row) => catalogFor(row.provider));
+  const catalog = await listModels();
+  const models = catalog.length ? catalog.map((row) => row.name) : DEFAULT_MODELS.map((row) => row.name);
   return Response.json({
     object: "list",
     data: models.map((id) => ({

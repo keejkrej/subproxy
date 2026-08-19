@@ -1,4 +1,4 @@
-import { chatgptAccountIdFromToken, cursorIdentityFromToken, expiryFromJwt } from "@/lib/jwt";
+import { chatgptAccountIdFromToken, expiryFromJwt } from "@/lib/jwt";
 import { operatorFailed, requireOperator } from "@/lib/operator";
 import { upsertSession } from "@/lib/vault";
 import type { ProviderId, SessionSecret } from "@/lib/types";
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
       refreshToken?: string;
       accountId?: string;
     };
-    if (body.provider !== "chatgpt" && body.provider !== "grok" && body.provider !== "cursor") {
+    if (body.provider !== "chatgpt" && body.provider !== "grok") {
       return Response.json({ error: "unknown provider" }, { status: 400 });
     }
     if (!body.accessToken || !body.refreshToken) {
@@ -23,9 +23,7 @@ export async function POST(req: Request) {
     const identity =
       body.provider === "chatgpt"
         ? body.accountId || chatgptAccountIdFromToken(body.accessToken) || null
-        : body.provider === "cursor"
-          ? cursorIdentityFromToken(body.accessToken) ?? null
-          : null;
+        : null;
     const secret: SessionSecret = {
       kind: "oauth",
       accessToken: body.accessToken,
@@ -35,7 +33,7 @@ export async function POST(req: Request) {
     const session = await upsertSession({
       id: body.sessionId,
       provider: body.provider,
-      label: body.label || (body.provider === "chatgpt" ? "ChatGPT" : body.provider === "grok" ? "Grok" : "Cursor"),
+      label: body.label || (body.provider === "chatgpt" ? "ChatGPT" : "Grok"),
       identity,
       secret,
       health: "unknown",

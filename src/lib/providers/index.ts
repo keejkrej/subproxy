@@ -1,8 +1,7 @@
-import { shouldRefresh } from "@/lib/health";
+import { GROK_REFRESH_WINDOW_MS, shouldRefresh } from "@/lib/health";
 import { expiryFromJwt } from "@/lib/jwt";
 import type { CompletionChunk, OpenAIChatRequest, ProbeResult, ProviderId, SessionSecret } from "@/lib/types";
 import { completeChatGpt, probeChatGpt, refreshChatGptSecret, CHATGPT_MODELS } from "./chatgpt";
-import { completeCursor, probeCursor, refreshCursorSecret, CURSOR_MODELS } from "./cursor";
 import { completeGrok, probeGrok, refreshGrokSecret, GROK_MODELS } from "./grok";
 
 export async function complete(
@@ -11,14 +10,12 @@ export async function complete(
   req: OpenAIChatRequest,
 ): Promise<AsyncGenerator<CompletionChunk>> {
   if (provider === "chatgpt") return completeChatGpt(secret, req);
-  if (provider === "grok") return completeGrok(secret, req);
-  return completeCursor(secret, req);
+  return completeGrok(secret, req);
 }
 
 export async function probe(provider: ProviderId, secret: SessionSecret): Promise<ProbeResult> {
   if (provider === "chatgpt") return probeChatGpt(secret);
-  if (provider === "grok") return probeGrok(secret);
-  return probeCursor(secret);
+  return probeGrok(secret);
 }
 
 export async function refreshIfNeeded(
@@ -30,26 +27,19 @@ export async function refreshIfNeeded(
     return { secret, expiresAt, refreshed: false };
   }
   const effectiveExpiry = expiresAt ?? expiryFromJwt(secret.accessToken);
-  if (!shouldRefresh(effectiveExpiry)) {
+  const windowMs = provider === "grok" ? GROK_REFRESH_WINDOW_MS : undefined;
+  if (!shouldRefresh(effectiveExpiry, new Date(), windowMs)) {
     return { secret, expiresAt: effectiveExpiry, refreshed: false };
   }
   if (provider === "chatgpt") {
     const next = await refreshChatGptSecret(secret);
     return { ...next, refreshed: true };
   }
-  if (provider === "grok") {
-    const next = await refreshGrokSecret(secret);
-    return { ...next, refreshed: true };
-  }
-  if (provider === "cursor") {
-    const next = await refreshCursorSecret(secret);
-    return { ...next, refreshed: false };
-  }
-  return { secret, expiresAt: effectiveExpiry, refreshed: false };
+  const next = await refreshGrokSecret(secret);
+  return { ...next, refreshed: true };
 }
 
 export function catalogFor(provider: ProviderId): string[] {
   if (provider === "chatgpt") return CHATGPT_MODELS.map((model) => `chatgpt/${model}`);
-  if (provider === "grok") return GROK_MODELS.map((model) => `grok/${model}`);
-  return CURSOR_MODELS.map((model) => `cursor/${model}`);
+  return GROK_MODELS.map((model) => `grok/${model}`);
 }

@@ -4,10 +4,11 @@ import {
   completionId,
   encodeOpenAIChunk,
   encodeOpenAIDone,
+  encodeOpenAIError,
   openAIResponse,
   sseResponse,
 } from "./openai-stream";
-import type { OpenAIChatRequest } from "./types";
+import type { CompletionChunk, OpenAIChatRequest, ProviderId } from "./types";
 import { extractBearer } from "./issued-key";
 
 export class GatewayError extends Error {
@@ -33,6 +34,7 @@ export async function handleChatCompletions(req: Request): Promise<Response> {
   const started = Date.now();
   let issuedKeyId: string | undefined;
   let sessionId: string | undefined;
+  let provider: ProviderId | undefined;
   let model = "unknown";
   try {
     const key = await authenticateIssuedKey(req.headers.get("authorization"));
@@ -50,6 +52,7 @@ export async function handleChatCompletions(req: Request): Promise<Response> {
       throw new GatewayError(`No Session can serve model ${body.model}`, 404);
     }
     sessionId = resolved.row.id;
+    provider = resolved.row.provider;
     let secret = resolved.secret;
     try {
       const refreshed = await refreshIfNeeded(
@@ -69,7 +72,22 @@ export async function handleChatCompletions(req: Request): Promise<Response> {
       // Use the stored secret; the provider call will surface auth errors.
     }
     const request: OpenAIChatRequest = { ...body, model: resolved.model };
-    const chunks = await complete(resolved.row.provider, secret, request);
+    const iterator = (await complete(resolved.row.provider, secret, request))[Symbol.asyncIterator]();
+    let first: IteratorResult<CompletionChunk>;
+    try {
+      first = await iterator.next();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "upstream error";
+      throw new GatewayError(message, statusFromUpstream(message));
+    }
+    async function* chunks() {
+      if (!first.done) yield first.value;
+      while (true) {
+        const next = await iterator.next();
+        if (next.done) return;
+        yield next.value;
+      }
+    }
     const id = completionId();
     const created = Math.floor(Date.now() / 1000);
 
@@ -79,7 +97,7 @@ export async function handleChatCompletions(req: Request): Promise<Response> {
         async start(controller) {
           let usage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
           try {
-            for await (const chunk of chunks) {
+            for await (const chunk of chunks()) {
               if (chunk.usage) usage = chunk.usage;
               controller.enqueue(
                 encoder.encode(
@@ -104,17 +122,18 @@ export async function handleChatCompletions(req: Request): Promise<Response> {
               outputTokens: usage?.completion_tokens ?? null,
             });
           } catch (error) {
+            const message = error instanceof Error ? error.message : "upstream error";
             await safeLedger({
               issuedKeyId,
               sessionId,
               provider: resolved.row.provider,
               model: body.model,
               status: 502,
-              error: error instanceof Error ? error.message : "upstream error",
+              error: message,
               latencyMs: Date.now() - started,
             });
-            controller.error(error);
-            return;
+            controller.enqueue(encoder.encode(encodeOpenAIError(message)));
+            controller.enqueue(encoder.encode(encodeOpenAIDone()));
           }
           controller.close();
         },
@@ -125,7 +144,7 @@ export async function handleChatCompletions(req: Request): Promise<Response> {
     let text = "";
     let usage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
     let finishReason = "stop";
-    for await (const chunk of chunks) {
+    for await (const chunk of chunks()) {
       if (chunk.text) text += chunk.text;
       if (chunk.usage) usage = chunk.usage;
       if (chunk.finishReason) finishReason = chunk.finishReason;
@@ -146,7 +165,7 @@ export async function handleChatCompletions(req: Request): Promise<Response> {
     await safeLedger({
       issuedKeyId,
       sessionId,
-      provider: undefined,
+      provider,
       model,
       status,
       error: error instanceof Error ? error.message : "internal error",
@@ -157,6 +176,12 @@ export async function handleChatCompletions(req: Request): Promise<Response> {
       { status },
     );
   }
+}
+
+function statusFromUpstream(message: string): number {
+  if (/unauthorized|unauthenticated|\b401\b/i.test(message)) return 401;
+  if (/rate limit|\b429\b/i.test(message)) return 429;
+  return 502;
 }
 
 async function safeLedger(input: Parameters<typeof writeLedger>[0]) {

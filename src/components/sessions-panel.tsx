@@ -29,7 +29,13 @@ export function SessionsPanel() {
   }
 
   useEffect(() => {
-    reload().catch((err: Error) => setError(err.message));
+    fetch("/api/sessions")
+      .then(async (response) => {
+        const json = await response.json();
+        if (!response.ok) throw new Error(json.error ?? "failed to load sessions");
+        setSessions(json.sessions);
+      })
+      .catch((err: Error) => setError(err.message));
   }, []);
 
   useEffect(() => {
@@ -98,9 +104,6 @@ export function SessionsPanel() {
         <Button variant="outline" onClick={() => startReauth("grok")} disabled={busy !== null}>
           Connect Grok
         </Button>
-        <Button variant="outline" onClick={() => startReauth("cursor")} disabled={busy !== null}>
-          Connect Cursor
-        </Button>
       </div>
 
       {error ? (
@@ -117,11 +120,7 @@ export function SessionsPanel() {
             <CardDescription>This page polls until the session is written.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {reauth.userCode ? (
-              <p className="font-mono text-2xl tracking-[0.2em]">{reauth.userCode}</p>
-            ) : (
-              <p className="text-sm text-muted-foreground">Approve Cursor in the opened browser tab.</p>
-            )}
+            <p className="font-mono text-2xl tracking-[0.2em]">{reauth.userCode}</p>
             <div className="flex flex-wrap gap-2">
               <a href={reauth.verificationUrl} target="_blank" rel="noreferrer">
                 <Button type="button">Open approval page</Button>

@@ -1,5 +1,4 @@
 import { pollChatGptDeviceAuth } from "@/lib/oauth/chatgpt";
-import { pollCursorPkceAuth } from "@/lib/oauth/cursor";
 import { pollGrokDeviceAuth } from "@/lib/oauth/grok";
 import { operatorFailed, requireOperator } from "@/lib/operator";
 import { deletePendingReauth, getPendingReauth, upsertSession } from "@/lib/vault";
@@ -24,28 +23,6 @@ export async function GET(_: Request, context: { params: Promise<{ id: string }>
         refreshToken: result.refreshToken,
         accountId: result.accountId,
       }, result.accountId ?? null, result.expiresAt);
-      await deletePendingReauth(id);
-      return Response.json({ status: "complete", session });
-    }
-
-    if (pending.provider === "cursor") {
-      const result = await pollCursorPkceAuth({
-        uuid: String(pending.payload.uuid ?? ""),
-        verifier: String(pending.payload.verifier ?? ""),
-      });
-      if (result === "pending") return Response.json({ status: "pending" });
-      const session = await persist(
-        "cursor",
-        pending.sessionId,
-        {
-          kind: "oauth",
-          accessToken: result.accessToken,
-          refreshToken: result.refreshToken,
-          accountId: result.identity ?? undefined,
-        },
-        result.identity,
-        result.expiresAt,
-      );
       await deletePendingReauth(id);
       return Response.json({ status: "complete", session });
     }
@@ -81,7 +58,7 @@ async function persist(
   return upsertSession({
     id: sessionId ?? undefined,
     provider,
-    label: provider === "chatgpt" ? "ChatGPT" : provider === "grok" ? "Grok" : "Cursor",
+    label: provider === "chatgpt" ? "ChatGPT" : "Grok",
     identity,
     secret,
     health: "healthy",

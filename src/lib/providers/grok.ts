@@ -1,5 +1,5 @@
 import { grokBaseUrl } from "@/lib/env";
-import { refreshGrokToken } from "@/lib/oauth/grok";
+import { grokPrincipalFromToken, refreshGrokToken } from "@/lib/oauth/grok";
 import { messageText } from "@/lib/openai-stream";
 import type { CompletionChunk, OpenAIChatRequest, ProbeResult, SessionSecret } from "@/lib/types";
 
@@ -14,6 +14,7 @@ function headers(secret: SessionSecret): HeadersInit {
     Authorization: `Bearer ${oauth.accessToken}`,
     "Content-Type": "application/json",
     Accept: "text/event-stream",
+    "X-XAI-Token-Auth": "xai-grok-cli",
     "x-grok-client-identifier": "grok-shell",
     "x-grok-client-version": process.env.GROK_CLIENT_VERSION ?? "0.2.103",
     "User-Agent": "xai-grok-cli",
@@ -112,7 +113,11 @@ export async function refreshGrokSecret(secret: SessionSecret): Promise<{
   expiresAt: Date | null;
 }> {
   const oauth = oauthSecret(secret);
-  const refreshed = await refreshGrokToken(oauth.refreshToken, oauth.tokenEndpoint);
+  const refreshed = await refreshGrokToken(
+    oauth.refreshToken,
+    oauth.tokenEndpoint,
+    grokPrincipalFromToken(oauth.accessToken),
+  );
   return {
     secret: {
       kind: "oauth",

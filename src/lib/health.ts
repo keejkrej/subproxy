@@ -1,6 +1,8 @@
 import type { Health } from "./types";
 
-const EXPIRING_WINDOW_MS = 2 * 60 * 60 * 1000;
+export const EXPIRING_WINDOW_MS = 2 * 60 * 60 * 1000;
+/** Grok access tokens last ~6h and rotate the refresh token on every grant. */
+export const GROK_REFRESH_WINDOW_MS = 10 * 60 * 1000;
 
 export function healthFromExpiry(expiresAt: Date | null | undefined, now = new Date()): Health {
   if (!expiresAt) return "unknown";
@@ -10,9 +12,13 @@ export function healthFromExpiry(expiresAt: Date | null | undefined, now = new D
   return "healthy";
 }
 
-export function shouldRefresh(expiresAt: Date | null | undefined, now = new Date()): boolean {
+export function shouldRefresh(
+  expiresAt: Date | null | undefined,
+  now = new Date(),
+  windowMs = EXPIRING_WINDOW_MS,
+): boolean {
   if (!expiresAt) return false;
-  return expiresAt.getTime() - now.getTime() <= EXPIRING_WINDOW_MS;
+  return expiresAt.getTime() - now.getTime() <= windowMs;
 }
 
 export function expiryFromSeconds(expiresIn: unknown, now = Date.now()): Date | null {

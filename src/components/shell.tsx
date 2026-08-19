@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 const links = [
   ["/", "Sessions"],
+  ["/models", "Models"],
   ["/keys", "Keys"],
   ["/ledger", "Ledger"],
 ] as const;
@@ -16,7 +17,7 @@ export function Shell({
   description,
   children,
 }: {
-  current: "/" | "/keys" | "/ledger";
+  current: "/" | "/models" | "/keys" | "/ledger";
   title: string;
   description: string;
   children: React.ReactNode;

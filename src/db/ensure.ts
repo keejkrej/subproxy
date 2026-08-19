@@ -1,4 +1,5 @@
 import { neon } from "@neondatabase/serverless";
+import { DEFAULT_MODELS } from "@/lib/catalog";
 import { databaseUrl } from "@/lib/env";
 
 let ready: Promise<void> | undefined;
@@ -52,6 +53,25 @@ export function ensureSchema(): Promise<void> {
         expires_at timestamptz NOT NULL,
         created_at timestamptz NOT NULL DEFAULT now()
       )`;
+      const existingModels = await sql`SELECT to_regclass('public.models') AS name`;
+      const modelsExisted = Boolean(existingModels[0]?.name);
+      await sql`CREATE TABLE IF NOT EXISTS models (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        name text NOT NULL UNIQUE,
+        provider text NOT NULL,
+        last_error text,
+        last_tested_at timestamptz,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      )`;
+      if (!modelsExisted) {
+        for (const model of DEFAULT_MODELS) {
+          await sql`INSERT INTO models (name, provider) VALUES (${model.name}, ${model.provider})`;
+        }
+      }
+      await sql`DELETE FROM pending_reauth WHERE provider = 'cursor'`;
+      await sql`DELETE FROM sessions WHERE provider = 'cursor'`;
+      await sql`DELETE FROM models WHERE provider = 'cursor'`;
     })();
   }
   return ready;

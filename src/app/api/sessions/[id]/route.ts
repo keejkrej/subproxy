@@ -7,8 +7,19 @@ export async function GET(_: Request, context: { params: Promise<{ id: string }>
     const { id } = await context.params;
     const session = await getSession(id);
     if (!session) return Response.json({ error: "not found" }, { status: 404 });
-    const { secret: _secret, ...safe } = session;
-    return Response.json({ session: safe });
+    return Response.json({
+      session: {
+        id: session.id,
+        provider: session.provider,
+        label: session.label,
+        identity: session.identity,
+        health: session.health,
+        expiresAt: session.expiresAt,
+        lastProbedAt: session.lastProbedAt,
+        lastError: session.lastError,
+        createdAt: session.createdAt,
+      },
+    });
   } catch (error) {
     return operatorFailed(error) ?? Response.json({ error: "failed" }, { status: 500 });
   }

@@ -12,6 +12,7 @@ describe("session health", () => {
   it("is expiring inside the two-hour window", () => {
     expect(healthFromExpiry(new Date("2026-08-19T13:00:00.000Z"), now)).toBe("expiring");
     expect(shouldRefresh(new Date("2026-08-19T13:00:00.000Z"), now)).toBe(true);
+    expect(shouldRefresh(new Date("2026-08-19T13:00:00.000Z"), now, 10 * 60 * 1000)).toBe(false);
   });
 
   it("is expired after the timestamp", () => {

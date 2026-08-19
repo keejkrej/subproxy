@@ -1,14 +1,15 @@
 import { desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { issuedKeys, ledger, pendingReauth, sessions } from "@/db/schema";
+import { issuedKeys, ledger, models, pendingReauth, sessions } from "@/db/schema";
+import { resolveModelRoute } from "./catalog";
 import { decryptJson, encryptJson } from "./crypto";
 import { healthFromExpiry } from "./health";
 import { hashIssuedKey, issuedKeysEqual } from "./issued-key";
-import { inferProvider } from "./routing";
 import type {
   Health,
   IssuedKeySummary,
   LedgerRow,
+  ModelSummary,
   ProviderId,
   SessionSecret,
   SessionSummary,
@@ -100,21 +101,66 @@ export async function deleteSession(id: string) {
 }
 
 export async function findSessionForModel(model: string) {
+  const catalog = await listModels();
+  const route = resolveModelRoute(model, catalog);
   const rows = await (await db()).select().from(sessions);
   const healthy = rows.filter((row) => row.health === "healthy" || row.health === "expiring");
   const pool = healthy.length ? healthy : rows;
-  const prefixed = model.match(/^(chatgpt|grok|cursor)\/(.+)$/);
-  if (prefixed) {
-    const row = pool.find((item) => item.provider === prefixed[1]);
-    return row
-      ? { row: toSummary(row), secret: decryptJson<SessionSecret>(row.ciphertext), model: prefixed[2] }
-      : null;
-  }
-  const provider = inferProvider(model);
-  const row = pool.find((item) => item.provider === provider);
+  const row = pool.find((item) => item.provider === route.provider);
   return row
-    ? { row: toSummary(row), secret: decryptJson<SessionSecret>(row.ciphertext), model }
+    ? { row: toSummary(row), secret: decryptJson<SessionSecret>(row.ciphertext), model: route.model }
     : null;
+}
+
+function toModelSummary(row: typeof models.$inferSelect): ModelSummary {
+  return {
+    id: row.id,
+    name: row.name,
+    provider: row.provider as ProviderId,
+    lastError: row.lastError,
+    lastTestedAt: row.lastTestedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export async function listModels(): Promise<ModelSummary[]> {
+  const rows = await (await db()).select().from(models).orderBy(models.createdAt);
+  return rows.map(toModelSummary);
+}
+
+export async function getModel(id: string) {
+  const [row] = await (await db()).select().from(models).where(eq(models.id, id)).limit(1);
+  return row ? toModelSummary(row) : null;
+}
+
+export async function insertModel(input: { name: string; provider: ProviderId }): Promise<ModelSummary> {
+  const [row] = await (await db()).insert(models).values(input).returning();
+  return toModelSummary(row);
+}
+
+export async function updateModel(
+  id: string,
+  patch: { name?: string; provider?: ProviderId },
+): Promise<ModelSummary | null> {
+  const [row] = await (await db())
+    .update(models)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(eq(models.id, id))
+    .returning();
+  return row ? toModelSummary(row) : null;
+}
+
+export async function deleteModel(id: string) {
+  const [row] = await (await db()).delete(models).where(eq(models.id, id)).returning({ id: models.id });
+  return Boolean(row);
+}
+
+export async function updateModelTest(id: string, lastError: string | null) {
+  await (await db())
+    .update(models)
+    .set({ lastError, lastTestedAt: new Date(), updatedAt: new Date() })
+    .where(eq(models.id, id));
 }
 
 export async function lookupIssuedKey(secret: string) {
