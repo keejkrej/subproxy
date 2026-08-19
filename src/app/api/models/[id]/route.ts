@@ -1,6 +1,5 @@
-import { isUniqueViolation, parseModelName, parseProvider } from "@/lib/catalog";
+import { CATALOG_NAME_HINT, isUniqueViolation, parseCatalogModel } from "@/lib/catalog";
 import { operatorFailed, requireOperator } from "@/lib/operator";
-import type { ProviderId } from "@/lib/types";
 import { deleteModel, getModel, updateModel } from "@/lib/vault";
 
 export async function GET(_: Request, context: { params: Promise<{ id: string }> }) {
@@ -19,22 +18,12 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
   try {
     await requireOperator();
     const { id } = await context.params;
-    const body = (await req.json().catch(() => ({}))) as { name?: unknown; provider?: unknown };
-    const patch: { name?: string; provider?: ProviderId } = {};
-    if (body.name !== undefined) {
-      const name = parseModelName(body.name);
-      if (!name) return Response.json({ error: "name is required" }, { status: 400 });
-      patch.name = name;
+    const body = (await req.json().catch(() => ({}))) as { name?: unknown };
+    const parsed = parseCatalogModel(body.name);
+    if (!parsed) {
+      return Response.json({ error: CATALOG_NAME_HINT }, { status: 400 });
     }
-    if (body.provider !== undefined) {
-      const provider = parseProvider(body.provider);
-      if (!provider) return Response.json({ error: "unknown provider" }, { status: 400 });
-      patch.provider = provider;
-    }
-    if (!patch.name && !patch.provider) {
-      return Response.json({ error: "nothing to update" }, { status: 400 });
-    }
-    const model = await updateModel(id, patch);
+    const model = await updateModel(id, parsed);
     if (!model) return Response.json({ error: "not found" }, { status: 404 });
     return Response.json({ model });
   } catch (error) {

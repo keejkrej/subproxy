@@ -8,7 +8,7 @@ export default function ModelsPage() {
       <Shell
         current="/models"
         title="Models"
-        description="Names clients send to /v1, routed to a provider session."
+        description="Names clients send to /v1. Must start with chatgpt/ or grok/."
       >
         <ModelsPanel />
       </Shell>

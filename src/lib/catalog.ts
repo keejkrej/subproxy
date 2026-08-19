@@ -28,6 +28,21 @@ export function parseModelName(value: unknown): string | null {
   return name ? name : null;
 }
 
+export const CATALOG_NAME_HINT = "Name must start with chatgpt/ or grok/, like chatgpt/gpt-5.6-terra";
+
+/** Catalog names encode the provider: `chatgpt/...` or `grok/...`. */
+export function parseCatalogModel(value: unknown): { name: string; provider: ProviderId } | null {
+  const name = parseModelName(value);
+  if (!name) return null;
+  const match = name.match(/^(chatgpt|grok)\/(.+)$/i);
+  if (!match) return null;
+  const rest = match[2].trim();
+  if (!rest) return null;
+  const provider = match[1].toLowerCase() as ProviderId;
+  if (!parseProvider(provider)) return null;
+  return { name: `${provider}/${rest}`, provider };
+}
+
 export function upstreamModel(name: string, provider: ProviderId): string {
   const prefix = `${provider}/`;
   return name.toLowerCase().startsWith(prefix) ? name.slice(prefix.length) : name;

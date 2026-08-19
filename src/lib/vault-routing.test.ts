@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseModelName, parseProvider, resolveModelRoute, upstreamModel } from "./catalog";
+import { parseCatalogModel, parseModelName, parseProvider, resolveModelRoute, upstreamModel } from "./catalog";
 import { inferProvider } from "./routing";
 
 describe("model routing", () => {
@@ -46,5 +46,19 @@ describe("neon model catalog", () => {
     expect(parseModelName(" grok-4.6 ")).toBe("grok-4.6");
     expect(parseProvider("claude")).toBeNull();
     expect(parseProvider("grok")).toBe("grok");
+  });
+
+  it("requires a chatgpt/ or grok/ prefix on catalog names", () => {
+    expect(parseCatalogModel("chatgpt/gpt-5.6-terra")).toEqual({
+      name: "chatgpt/gpt-5.6-terra",
+      provider: "chatgpt",
+    });
+    expect(parseCatalogModel("  Grok/grok-4.6  ")).toEqual({
+      name: "grok/grok-4.6",
+      provider: "grok",
+    });
+    expect(parseCatalogModel("gpt-5.6-terra")).toBeNull();
+    expect(parseCatalogModel("chatgpt/")).toBeNull();
+    expect(parseCatalogModel("cursor/composer-2.5")).toBeNull();
   });
 });

@@ -1,58 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PROVIDERS, type ModelSummary, type ProviderId } from "@/lib/types";
+import { CATALOG_NAME_HINT, parseCatalogModel } from "@/lib/catalog";
+import type { ModelSummary } from "@/lib/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
-
-const selectClassName = cn(
-  "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none",
-  "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-  "disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30",
-);
-
-function ProviderSelect({
-  id,
-  value,
-  onChange,
-  disabled,
-}: {
-  id?: string;
-  value: ProviderId;
-  onChange: (value: ProviderId) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <select
-      id={id}
-      className={selectClassName}
-      value={value}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value as ProviderId)}
-    >
-      {PROVIDERS.map((provider) => (
-        <option key={provider} value={provider}>
-          {provider}
-        </option>
-      ))}
-    </select>
-  );
-}
 
 export function ModelsPanel() {
   const [models, setModels] = useState<ModelSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [provider, setProvider] = useState<ProviderId>("chatgpt");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
-  const [draftProvider, setDraftProvider] = useState<ProviderId>("chatgpt");
 
   async function reload() {
     const response = await fetch("/api/models");
@@ -72,13 +36,18 @@ export function ModelsPanel() {
   }, []);
 
   async function create() {
+    const parsed = parseCatalogModel(name);
+    if (!parsed) {
+      setError(CATALOG_NAME_HINT);
+      return;
+    }
     setBusy("create");
     setError(null);
     try {
       const response = await fetch("/api/models", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, provider }),
+        body: JSON.stringify({ name: parsed.name }),
       });
       const json = await response.json();
       if (!response.ok) throw new Error(json.error ?? "create failed");
@@ -94,18 +63,22 @@ export function ModelsPanel() {
   function startEdit(model: ModelSummary) {
     setEditingId(model.id);
     setDraftName(model.name);
-    setDraftProvider(model.provider);
     setError(null);
   }
 
   async function save(id: string) {
+    const parsed = parseCatalogModel(draftName);
+    if (!parsed) {
+      setError(CATALOG_NAME_HINT);
+      return;
+    }
     setBusy(`save-${id}`);
     setError(null);
     try {
       const response = await fetch(`/api/models/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: draftName, provider: draftProvider }),
+        body: JSON.stringify({ name: parsed.name }),
       });
       const json = await response.json();
       if (!response.ok) throw new Error(json.error ?? "update failed");
@@ -165,10 +138,6 @@ export function ModelsPanel() {
             placeholder="chatgpt/gpt-5.6-terra"
           />
         </div>
-        <div className="grid w-full gap-1.5 sm:w-40">
-          <Label htmlFor="model-provider">Provider</Label>
-          <ProviderSelect id="model-provider" value={provider} onChange={setProvider} />
-        </div>
         <Button onClick={create} disabled={busy !== null || !name.trim()}>
           Add model
         </Button>
@@ -195,6 +164,9 @@ export function ModelsPanel() {
             <TableBody>
               {models.map((model) => {
                 const editing = editingId === model.id;
+                const shownProvider = editing
+                  ? (parseCatalogModel(draftName)?.provider ?? "—")
+                  : model.provider;
                 return (
                   <TableRow key={model.id}>
                     <TableCell>
@@ -204,13 +176,7 @@ export function ModelsPanel() {
                         <span className="font-mono text-sm">{model.name}</span>
                       )}
                     </TableCell>
-                    <TableCell>
-                      {editing ? (
-                        <ProviderSelect value={draftProvider} onChange={setDraftProvider} />
-                      ) : (
-                        <span className="font-mono text-muted-foreground">{model.provider}</span>
-                      )}
-                    </TableCell>
+                    <TableCell className="font-mono text-muted-foreground">{shownProvider}</TableCell>
                     <TableCell className="max-w-xs text-muted-foreground">
                       {model.lastTestedAt ? (
                         <div className="space-y-0.5">
@@ -273,7 +239,7 @@ export function ModelsPanel() {
               {models.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} className="py-10 text-center text-muted-foreground">
-                    No models yet. Add a name and provider.
+                    No models yet. Add a name like chatgpt/gpt-5.6-terra.
                   </TableCell>
                 </TableRow>
               ) : null}
