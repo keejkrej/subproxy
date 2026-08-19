@@ -14,7 +14,7 @@ export async function POST(req: Request) {
       refreshToken?: string;
       accountId?: string;
     };
-    if (body.provider !== "chatgpt" && body.provider !== "grok") {
+    if (body.provider !== "chatgpt" && body.provider !== "supergrok") {
       return Response.json({ error: "unknown provider" }, { status: 400 });
     }
     if (!body.accessToken || !body.refreshToken) {
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     const session = await upsertSession({
       id: body.sessionId,
       provider: body.provider,
-      label: body.label || (body.provider === "chatgpt" ? "ChatGPT" : "Grok"),
+      label: body.label || (body.provider === "chatgpt" ? "ChatGPT" : "SuperGrok"),
       identity,
       secret,
       health: "unknown",

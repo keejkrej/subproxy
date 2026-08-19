@@ -29,7 +29,7 @@ Tables are created automatically on first request.
 ## Use
 
 - Sign in with Clerk.
-- Connect ChatGPT / Grok via device-code Re-auth.
+- Connect ChatGPT / SuperGrok via device-code Re-auth.
 - Mint an Issued Key on the Keys screen.
 - Point clients at the gateway:
 
@@ -38,7 +38,7 @@ OPENAI_BASE_URL=https://<your-app>.vercel.app/v1
 OPENAI_API_KEY=sk-sub-...
 ```
 
-Model names: `chatgpt/gpt-5`, `grok/grok-4.6` (or unprefixed `gpt-5` / `grok-4.6`).
+Model names: `chatgpt/gpt-5`, `supergrok/grok-4.6`. `grok/...` is not SuperGrok.
 
 Completions call each provider’s HTTP API with the stored OAuth token. No local CLI is spawned.
 

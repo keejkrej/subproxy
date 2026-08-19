@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   try {
     await requireOperator();
     const body = (await req.json()) as { provider?: ProviderId; sessionId?: string };
-    if (body.provider !== "chatgpt" && body.provider !== "grok") {
+    if (body.provider !== "chatgpt" && body.provider !== "supergrok") {
       return Response.json({ error: "unknown provider" }, { status: 400 });
     }
     if (body.provider === "chatgpt") {
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     }
     const started = await startGrokDeviceAuth();
     const pending = await createPendingReauth({
-      provider: "grok",
+      provider: "supergrok",
       sessionId: body.sessionId ?? null,
       payload: started,
       expiresAt: new Date(started.expiresAt),

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { HealthDot } from "./health-dot";
-import type { ProviderId, SessionSummary } from "@/lib/types";
+import { providerLabel, type ProviderId, type SessionSummary } from "@/lib/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -101,8 +101,8 @@ export function SessionsPanel() {
         <Button onClick={() => startReauth("chatgpt")} disabled={busy !== null}>
           Connect ChatGPT
         </Button>
-        <Button variant="outline" onClick={() => startReauth("grok")} disabled={busy !== null}>
-          Connect Grok
+        <Button variant="outline" onClick={() => startReauth("supergrok")} disabled={busy !== null}>
+          Connect SuperGrok
         </Button>
       </div>
 
@@ -116,7 +116,7 @@ export function SessionsPanel() {
       {reauth ? (
         <Card>
           <CardHeader>
-            <CardTitle>Approve {reauth.provider}</CardTitle>
+            <CardTitle>Approve {providerLabel(reauth.provider)}</CardTitle>
             <CardDescription>This page polls until the session is written.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -149,7 +149,7 @@ export function SessionsPanel() {
             <TableBody>
               {sessions.map((session) => (
                 <TableRow key={session.id}>
-                  <TableCell className="font-mono">{session.provider}</TableCell>
+                  <TableCell className="font-mono">{providerLabel(session.provider)}</TableCell>
                   <TableCell className="text-muted-foreground">{session.identity ?? session.label}</TableCell>
                   <TableCell>
                     <HealthDot health={session.health} />

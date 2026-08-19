@@ -32,7 +32,7 @@ export async function GET(_: Request, context: { params: Promise<{ id: string }>
       tokenEndpoint: String(pending.payload.tokenEndpoint ?? ""),
     });
     if (result === "pending") return Response.json({ status: "pending" });
-    const session = await persist("grok", pending.sessionId, {
+    const session = await persist("supergrok", pending.sessionId, {
       kind: "oauth",
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
@@ -58,7 +58,7 @@ async function persist(
   return upsertSession({
     id: sessionId ?? undefined,
     provider,
-    label: provider === "chatgpt" ? "ChatGPT" : "Grok",
+    label: provider === "chatgpt" ? "ChatGPT" : "SuperGrok",
     identity,
     secret,
     health: "healthy",

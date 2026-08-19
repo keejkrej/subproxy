@@ -5,7 +5,7 @@ import { Shell } from "@/components/shell";
 export default function HomePage() {
   return (
     <AllowlistGate>
-      <Shell current="/" title="Sessions" description="Connect ChatGPT and Grok over OAuth.">
+      <Shell current="/" title="Sessions" description="Connect ChatGPT and SuperGrok over OAuth.">
         <SessionsPanel />
       </Shell>
     </AllowlistGate>

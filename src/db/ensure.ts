@@ -72,6 +72,10 @@ export function ensureSchema(): Promise<void> {
       await sql`DELETE FROM pending_reauth WHERE provider = 'cursor'`;
       await sql`DELETE FROM sessions WHERE provider = 'cursor'`;
       await sql`DELETE FROM models WHERE provider = 'cursor'`;
+      await sql`UPDATE sessions SET provider = 'supergrok' WHERE provider = 'grok'`;
+      await sql`UPDATE pending_reauth SET provider = 'supergrok' WHERE provider = 'grok'`;
+      await sql`UPDATE ledger SET provider = 'supergrok' WHERE provider = 'grok'`;
+      await sql`UPDATE models SET provider = 'supergrok', name = regexp_replace(name, '^grok/', 'supergrok/') WHERE provider = 'grok' OR name LIKE 'grok/%'`;
     })();
   }
   return ready;

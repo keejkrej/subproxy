@@ -1,5 +1,9 @@
-export const PROVIDERS = ["chatgpt", "grok"] as const;
+export const PROVIDERS = ["chatgpt", "supergrok"] as const;
 export type ProviderId = (typeof PROVIDERS)[number];
+
+export function providerLabel(provider: ProviderId): string {
+  return provider === "chatgpt" ? "ChatGPT" : "SuperGrok";
+}
 
 export const HEALTH_STATES = [
   "healthy",

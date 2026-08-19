@@ -27,7 +27,7 @@ export async function refreshIfNeeded(
     return { secret, expiresAt, refreshed: false };
   }
   const effectiveExpiry = expiresAt ?? expiryFromJwt(secret.accessToken);
-  const windowMs = provider === "grok" ? GROK_REFRESH_WINDOW_MS : undefined;
+  const windowMs = provider === "supergrok" ? GROK_REFRESH_WINDOW_MS : undefined;
   if (!shouldRefresh(effectiveExpiry, new Date(), windowMs)) {
     return { secret, expiresAt: effectiveExpiry, refreshed: false };
   }
@@ -41,5 +41,5 @@ export async function refreshIfNeeded(
 
 export function catalogFor(provider: ProviderId): string[] {
   if (provider === "chatgpt") return CHATGPT_MODELS.map((model) => `chatgpt/${model}`);
-  return GROK_MODELS.map((model) => `grok/${model}`);
+  return GROK_MODELS.map((model) => `supergrok/${model}`);
 }

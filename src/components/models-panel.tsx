@@ -156,7 +156,6 @@ export function ModelsPanel() {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>Provider</TableHead>
                 <TableHead>Last test</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -164,9 +163,6 @@ export function ModelsPanel() {
             <TableBody>
               {models.map((model) => {
                 const editing = editingId === model.id;
-                const shownProvider = editing
-                  ? (parseCatalogModel(draftName)?.provider ?? "—")
-                  : model.provider;
                 return (
                   <TableRow key={model.id}>
                     <TableCell>
@@ -176,7 +172,6 @@ export function ModelsPanel() {
                         <span className="font-mono text-sm">{model.name}</span>
                       )}
                     </TableCell>
-                    <TableCell className="font-mono text-muted-foreground">{shownProvider}</TableCell>
                     <TableCell className="max-w-xs text-muted-foreground">
                       {model.lastTestedAt ? (
                         <div className="space-y-0.5">
@@ -238,8 +233,8 @@ export function ModelsPanel() {
               })}
               {models.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="py-10 text-center text-muted-foreground">
-                    No models yet. Add a name like chatgpt/gpt-5.6-terra.
+                  <TableCell colSpan={3} className="py-10 text-center text-muted-foreground">
+                    No models yet. Add a name like chatgpt/gpt-5.6-terra or supergrok/grok-4.6.
                   </TableCell>
                 </TableRow>
               ) : null}

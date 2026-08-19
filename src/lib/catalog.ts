@@ -12,10 +12,10 @@ export const DEFAULT_MODELS: CatalogEntry[] = [
   { name: "chatgpt/gpt-5.6-sol", provider: "chatgpt" },
   { name: "chatgpt/gpt-5.6", provider: "chatgpt" },
   { name: "chatgpt/gpt-5.5", provider: "chatgpt" },
-  { name: "grok/grok-4.6", provider: "grok" },
-  { name: "grok/grok-4.5", provider: "grok" },
-  { name: "grok/grok-4", provider: "grok" },
-  { name: "grok/grok-code", provider: "grok" },
+  { name: "supergrok/grok-4.6", provider: "supergrok" },
+  { name: "supergrok/grok-4.5", provider: "supergrok" },
+  { name: "supergrok/grok-4", provider: "supergrok" },
+  { name: "supergrok/grok-code", provider: "supergrok" },
 ];
 
 export function parseProvider(value: unknown): ProviderId | null {
@@ -28,18 +28,18 @@ export function parseModelName(value: unknown): string | null {
   return name ? name : null;
 }
 
-export const CATALOG_NAME_HINT = "Name must start with chatgpt/ or grok/, like chatgpt/gpt-5.6-terra";
+export const CATALOG_NAME_HINT = "Name must start with chatgpt/ or supergrok/, like chatgpt/gpt-5.6-terra";
 
-/** Catalog names encode the provider: `chatgpt/...` or `grok/...`. */
+/** Catalog names encode the provider: `chatgpt/...` or `supergrok/...`. */
 export function parseCatalogModel(value: unknown): { name: string; provider: ProviderId } | null {
   const name = parseModelName(value);
   if (!name) return null;
-  const match = name.match(/^(chatgpt|grok)\/(.+)$/i);
+  const match = name.match(/^(chatgpt|supergrok)\/(.+)$/i);
   if (!match) return null;
   const rest = match[2].trim();
   if (!rest) return null;
-  const provider = match[1].toLowerCase() as ProviderId;
-  if (!parseProvider(provider)) return null;
+  const provider = parseProvider(match[1].toLowerCase());
+  if (!provider) return null;
   return { name: `${provider}/${rest}`, provider };
 }
 
@@ -63,9 +63,10 @@ export function resolveModelRoute(
   if (exact) {
     return { provider: exact.provider, model: upstreamModel(exact.name, exact.provider) };
   }
-  const prefixed = requested.match(/^(chatgpt|grok)\/(.+)$/);
+  const prefixed = requested.match(/^(chatgpt|supergrok)\/(.+)$/i);
   if (prefixed) {
-    return { provider: prefixed[1] as ProviderId, model: prefixed[2] };
+    const provider = parseProvider(prefixed[1].toLowerCase());
+    if (provider) return { provider, model: prefixed[2] };
   }
   return { provider: inferProvider(requested), model: requested };
 }

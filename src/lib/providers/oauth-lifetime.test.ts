@@ -70,7 +70,7 @@ describe("grok oauth refresh", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const next = await refreshIfNeeded(
-      "grok",
+      "supergrok",
       { kind: "oauth", accessToken: token, refreshToken: "rt_keep", tokenEndpoint: "https://auth.x.ai/oauth2/token" },
       new Date(Date.now() + 60 * 60 * 1000),
     );
@@ -93,7 +93,7 @@ describe("grok oauth refresh", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const next = await refreshIfNeeded(
-      "grok",
+      "supergrok",
       { kind: "oauth", accessToken: token, refreshToken: "rt_old", tokenEndpoint: "https://auth.x.ai/oauth2/token" },
       new Date(Date.now() + 5 * 60 * 1000),
     );
