@@ -1,6 +1,6 @@
 import { grokBaseUrl } from "@/lib/env";
 import { grokPrincipalFromToken, refreshGrokToken } from "@/lib/oauth/grok";
-import { messageText } from "@/lib/openai-stream";
+import { normalizeToolCallDeltas, toGrokMessages } from "@/lib/tools";
 import type { CompletionChunk, OpenAIChatRequest, ProbeResult, SessionSecret } from "@/lib/types";
 
 function oauthSecret(secret: SessionSecret) {
@@ -41,25 +41,51 @@ async function grokFetch(secret: SessionSecret, path: string, init?: RequestInit
   throw new Error(lastError);
 }
 
+export function buildGrokChatBody(req: OpenAIChatRequest) {
+  return {
+    model: req.model,
+    stream: true,
+    messages: toGrokMessages(req.messages),
+    ...(req.tools != null ? { tools: req.tools } : {}),
+    ...(req.tool_choice != null ? { tool_choice: req.tool_choice } : {}),
+  };
+}
+
+export function chunkFromGrokEvent(json: {
+  choices?: {
+    delta?: { content?: string | null; tool_calls?: unknown };
+    message?: { content?: string | null; tool_calls?: unknown };
+    finish_reason?: string | null;
+  }[];
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+}): CompletionChunk | null {
+  const choice = json.choices?.[0];
+  const text = choice?.delta?.content ?? (typeof choice?.message?.content === "string" ? choice.message.content : undefined);
+  const toolCalls =
+    normalizeToolCallDeltas(choice?.delta?.tool_calls) ?? normalizeToolCallDeltas(choice?.message?.tool_calls);
+  const finishReason = choice?.finish_reason ?? undefined;
+  if (!text && !toolCalls?.length && !finishReason && !json.usage) return null;
+  return {
+    text: text ?? undefined,
+    toolCalls,
+    finishReason,
+    usage: json.usage,
+  };
+}
+
 export async function* completeGrok(
   secret: SessionSecret,
   req: OpenAIChatRequest,
 ): AsyncGenerator<CompletionChunk> {
   const response = await grokFetch(secret, "/chat/completions", {
     method: "POST",
-    body: JSON.stringify({
-      model: req.model,
-      stream: true,
-      messages: req.messages.map((message) => ({
-        role: message.role,
-        content: messageText(message.content),
-      })),
-    }),
+    body: JSON.stringify(buildGrokChatBody(req)),
   });
   if (!response.body) throw new Error("Grok returned an empty body");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let sawFinish = false;
   try {
     while (true) {
       const { done, value } = await reader.read();
@@ -71,20 +97,14 @@ export async function* completeGrok(
         if (!line.startsWith("data: ")) continue;
         const data = line.slice(6).trim();
         if (!data || data === "[DONE]") {
-          if (data === "[DONE]") yield { finishReason: "stop" };
+          if (data === "[DONE]" && !sawFinish) yield { finishReason: "stop" };
           continue;
         }
         try {
-          const json = JSON.parse(data) as {
-            choices?: { delta?: { content?: string }; finish_reason?: string | null }[];
-            usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
-          };
-          const choice = json.choices?.[0];
-          yield {
-            text: choice?.delta?.content,
-            finishReason: choice?.finish_reason ?? undefined,
-            usage: json.usage,
-          };
+          const chunk = chunkFromGrokEvent(JSON.parse(data));
+          if (!chunk) continue;
+          if (chunk.finishReason) sawFinish = true;
+          yield chunk;
         } catch {
           // ignore
         }

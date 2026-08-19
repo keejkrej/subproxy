@@ -1,4 +1,4 @@
-import type { CompletionChunk } from "./types";
+import type { CompletionChunk, OpenAIToolCall } from "./types";
 
 export function completionId(): string {
   return `chatcmpl_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
@@ -10,6 +10,10 @@ export function encodeOpenAIChunk(input: {
   created: number;
   chunk: CompletionChunk;
 }): string {
+  const delta: Record<string, unknown> = {};
+  if (input.chunk.text) delta.content = input.chunk.text;
+  if (input.chunk.toolCalls?.length) delta.tool_calls = input.chunk.toolCalls;
+
   const body = {
     id: input.id,
     object: "chat.completion.chunk",
@@ -18,7 +22,7 @@ export function encodeOpenAIChunk(input: {
     choices: [
       {
         index: 0,
-        delta: input.chunk.text ? { content: input.chunk.text } : input.chunk.finishReason ? {} : {},
+        delta,
         finish_reason: input.chunk.finishReason ?? null,
       },
     ],
@@ -42,7 +46,9 @@ export function openAIResponse(input: {
   text: string;
   usage?: CompletionChunk["usage"];
   finishReason?: string;
+  toolCalls?: OpenAIToolCall[];
 }) {
+  const hasTools = Boolean(input.toolCalls?.length);
   return {
     id: input.id,
     object: "chat.completion",
@@ -51,8 +57,12 @@ export function openAIResponse(input: {
     choices: [
       {
         index: 0,
-        message: { role: "assistant", content: input.text },
-        finish_reason: input.finishReason ?? "stop",
+        message: {
+          role: "assistant",
+          content: hasTools ? input.text || null : input.text,
+          ...(hasTools ? { tool_calls: input.toolCalls } : {}),
+        },
+        finish_reason: input.finishReason ?? (hasTools ? "tool_calls" : "stop"),
       },
     ],
     usage: input.usage ?? {
