@@ -1,6 +1,21 @@
 import { messageText } from "./openai-stream";
 import type { CompletionChunk, OpenAIChatMessage, OpenAIToolCall, OpenAIToolCallDelta } from "./types";
 
+/** Responses item `id` must start with `fc_`. Chat Completions tool ids start with `call_`. */
+export function responsesItemId(callId: string): string {
+  if (!callId) return callId;
+  if (callId.startsWith("fc_")) return callId;
+  if (callId.startsWith("call_")) return `fc_${callId.slice("call_".length)}`;
+  return `fc_${callId}`;
+}
+
+export function responsesCallId(callId: string): string {
+  if (!callId) return callId;
+  if (callId.startsWith("call_")) return callId;
+  if (callId.startsWith("fc_")) return `call_${callId.slice("fc_".length)}`;
+  return callId;
+}
+
 export function stringifyToolArguments(value: unknown): string {
   if (typeof value === "string") return value;
   if (value == null) return "";
@@ -121,7 +136,7 @@ export function toResponsesInput(messages: OpenAIChatMessage[]): {
     if (message.role === "tool") {
       input.push({
         type: "function_call_output",
-        call_id: message.tool_call_id ?? "",
+        call_id: responsesCallId(message.tool_call_id ?? ""),
         output: messageText(message.content),
       });
       continue;
@@ -139,8 +154,8 @@ export function toResponsesInput(messages: OpenAIChatMessage[]): {
       for (const call of asToolCalls(message.tool_calls)) {
         input.push({
           type: "function_call",
-          id: call.id,
-          call_id: call.id,
+          id: responsesItemId(call.id),
+          call_id: responsesCallId(call.id),
           name: call.function.name,
           arguments: call.function.arguments,
         });

@@ -86,7 +86,7 @@ describe("OpenAI function tools to Codex Responses", () => {
       },
       {
         type: "function_call",
-        id: "call_term_1",
+        id: "fc_term_1",
         call_id: "call_term_1",
         name: "terminal",
         arguments: '{"action":"exec","command":"echo UNIQUE_TOKEN_42"}',
@@ -97,6 +97,40 @@ describe("OpenAI function tools to Codex Responses", () => {
         output: "UNIQUE_TOKEN_42",
       },
     ]);
+  });
+
+  it("rewrites Chat Completions call_ ids so Responses item ids start with fc_", () => {
+    const callId = "call_H6kbYkZIK7GdxnqnMEhNJePW";
+    const { input } = toResponsesInput([
+      { role: "user", content: "what is this repo" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: callId,
+            type: "function",
+            function: { name: "read_file", arguments: '{"target_file":"README.md"}' },
+          },
+        ],
+      },
+      { role: "tool", tool_call_id: callId, content: "# subproxy" },
+    ]);
+    const ids = input.map((item) => item.id).filter(Boolean);
+    expect(ids.every((id) => String(id).startsWith("fc_"))).toBe(true);
+    expect(ids).not.toContain(callId);
+    expect(input).toContainEqual({
+      type: "function_call",
+      id: "fc_H6kbYkZIK7GdxnqnMEhNJePW",
+      call_id: callId,
+      name: "read_file",
+      arguments: '{"target_file":"README.md"}',
+    });
+    expect(input).toContainEqual({
+      type: "function_call_output",
+      call_id: callId,
+      output: "# subproxy",
+    });
   });
 
   it("already-flat Responses tools pass through", () => {
